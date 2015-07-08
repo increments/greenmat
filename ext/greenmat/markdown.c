@@ -1880,12 +1880,12 @@ static size_t
 parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t size, int *flags)
 {
 	struct buf *work = 0, *inter = 0;
-	size_t beg = 0, end, pre, sublist = 0, orgpre = 0, i;
+	size_t beg = 0, end, indent_width, sublist = 0, org_indent_width = 0;
 	int in_empty = 0, has_inside_empty = 0, in_fence = 0;
 
 	/* keeping track of the first indentation prefix */
-	while (orgpre < 3 && orgpre < size && data[orgpre] == ' ')
-		orgpre++;
+	while (org_indent_width < 3 && org_indent_width < size && data[org_indent_width] == ' ')
+		org_indent_width++;
 
 	beg = prefix_uli(data, size);
 	if (!beg)
@@ -1924,22 +1924,20 @@ parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t s
 		}
 
 		/* calculating the indentation */
-		i = 0;
-		while (i < 4 && beg + i < end && data[beg + i] == ' ')
-			i++;
-
-		pre = i;
+		indent_width = 0;
+		while (indent_width < 4 && beg + indent_width < end && data[beg + indent_width] == ' ')
+			indent_width++;
 
 		if (rndr->ext_flags & MKDEXT_FENCED_CODE) {
-			if (is_codefence(data + beg + i, end - beg - i, NULL) != 0)
+			if (is_codefence(data + beg + indent_width, end - beg - indent_width, NULL) != 0)
 				in_fence = !in_fence;
 		}
 
 		/* Only check for new list items if we are **not** inside
 		 * a fenced code block */
 		if (!in_fence) {
-			has_next_uli = prefix_uli(data + beg + i, end - beg - i);
-			has_next_oli = prefix_oli(data + beg + i, end - beg - i);
+			has_next_uli = prefix_uli(data + beg + indent_width, end - beg - indent_width);
+			has_next_oli = prefix_oli(data + beg + indent_width, end - beg - indent_width);
 		}
 
 		/* checking for ul/ol switch */
@@ -1951,18 +1949,18 @@ parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t s
 		}
 
 		/* checking for a new item */
-		if ((has_next_uli && !is_hrule(data + beg + i, end - beg - i)) || has_next_oli) {
+		if ((has_next_uli && !is_hrule(data + beg + indent_width, end - beg - indent_width)) || has_next_oli) {
 			if (in_empty)
 				has_inside_empty = 1;
 
-			if (pre == orgpre) /* the following item must have */
+			if (indent_width == org_indent_width) /* the following item must have */
 				break;             /* the same indentation */
 
 			if (!sublist)
 				sublist = work->size;
 		}
 		/* joining only indented stuff after empty lines */
-		else if (in_empty && i < 4 && data[beg] != '\t') {
+		else if (in_empty && indent_width < 4 && data[beg] != '\t') {
 			*flags |= MKD_LI_END;
 			break;
 		}
@@ -1974,7 +1972,7 @@ parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t s
 		in_empty = 0;
 
 		/* adding the line without prefix into the working buffer */
-		bufput(work, data + beg + i, end - beg - i);
+		bufput(work, data + beg + indent_width, end - beg - indent_width);
 		beg = end;
 	}
 
