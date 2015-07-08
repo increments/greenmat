@@ -7,6 +7,56 @@ module Greenmat
     let(:options) { {} }
     let(:rendered_html) { markdown.render(text) }
 
+    context 'with sub-lists' do
+      context 'with 4 space based indentations' do
+        let(:text) { <<-END.gsub(/^\s+\|/, '') }
+          |- foo
+          |    - bar
+          |        - baz
+        END
+
+        it 'properly handles the list levels' do
+          expect(rendered_html).to eq(<<-END.gsub(/^\s+\|/, ''))
+            |<ul>
+            |<li>foo
+            |
+            |<ul>
+            |<li>bar
+            |
+            |<ul>
+            |<li>baz</li>
+            |</ul></li>
+            |</ul></li>
+            |</ul>
+          END
+        end
+      end
+
+      context 'with 2 space based indentations' do
+        let(:text) { <<-END.gsub(/^\s+\|/, '') }
+          |- foo
+          |  - bar
+          |    - baz
+        END
+
+        it 'properly handles the list levels' do
+          expect(rendered_html).to eq(<<-END.gsub(/^\s+\|/, ''))
+            |<ul>
+            |<li>foo
+            |
+            |<ul>
+            |<li>bar
+            |
+            |<ul>
+            |<li>baz</li>
+            |</ul></li>
+            |</ul></li>
+            |</ul>
+          END
+        end
+      end
+    end
+
     context 'with no_mention_emphasis option' do
       let(:options) { { no_mention_emphasis: true } }
 

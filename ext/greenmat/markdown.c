@@ -1924,8 +1924,9 @@ parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t s
 		}
 
 		/* calculating the indentation */
+		size_t max_indent_width = (indent_width == 0 ? 4 : indent_width);
 		indent_width = 0;
-		while (indent_width < 4 && beg + indent_width < end && data[beg + indent_width] == ' ')
+		while (indent_width < max_indent_width && beg + indent_width < end && data[beg + indent_width] == ' ')
 			indent_width++;
 
 		if (rndr->ext_flags & MKDEXT_FENCED_CODE) {
