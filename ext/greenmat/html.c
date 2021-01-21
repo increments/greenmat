@@ -132,7 +132,6 @@ rndr_blockcode(struct buf *ob, const struct buf *text, const struct buf *lang, v
     size_t i, cls;
     if (options->flags & HTML_PRETTIFY) {
       BUFPUTSL(ob, "<pre><code class=\"prettyprint\" data-metadata=\"");
-      cls++;
     } else {
       BUFPUTSL(ob, "<pre><code data-metadata=\"");
     }
