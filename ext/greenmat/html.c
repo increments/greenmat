@@ -768,7 +768,7 @@ sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *optio
 
   memset(options, 0x0, sizeof(struct html_renderopt));
   options->flags = HTML_TOC;
-  toc_data.nesting_bounds[0] = nesting_level;
+  options->toc_data.nesting_bounds[0] = nesting_level;
 
   memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));
 }
