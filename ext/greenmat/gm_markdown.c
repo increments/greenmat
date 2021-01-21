@@ -28,159 +28,161 @@ VALUE rb_cRenderHTML_TOC;
 
 extern VALUE rb_cRenderBase;
 
+static size_t MAX_NESTING = 32;
+
 static void rb_greenmat_md_flags(VALUE hash, unsigned int *enabled_extensions_p)
 {
-	unsigned int extensions = 0;
+  unsigned int extensions = 0;
 
-	Check_Type(hash, T_HASH);
+  Check_Type(hash, T_HASH);
 
-	/**
-	 * Markdown extensions -- all disabled by default
-	 */
-	if (rb_hash_lookup(hash, CSTR2SYM("no_intra_emphasis")) == Qtrue)
-		extensions |= MKDEXT_NO_INTRA_EMPHASIS;
+  /**
+   * Markdown extensions -- all disabled by default
+   */
+  if (rb_hash_lookup(hash, CSTR2SYM("no_intra_emphasis")) == Qtrue)
+    extensions |= MKDEXT_NO_INTRA_EMPHASIS;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("tables")) == Qtrue)
-		extensions |= MKDEXT_TABLES;
+  if (rb_hash_lookup(hash, CSTR2SYM("tables")) == Qtrue)
+    extensions |= MKDEXT_TABLES;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("fenced_code_blocks")) == Qtrue)
-		extensions |= MKDEXT_FENCED_CODE;
+  if (rb_hash_lookup(hash, CSTR2SYM("fenced_code_blocks")) == Qtrue)
+    extensions |= MKDEXT_FENCED_CODE;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("disable_indented_code_blocks")) == Qtrue)
-		extensions |= MKDEXT_DISABLE_INDENTED_CODE;
+  if (rb_hash_lookup(hash, CSTR2SYM("disable_indented_code_blocks")) == Qtrue)
+    extensions |= MKDEXT_DISABLE_INDENTED_CODE;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("autolink")) == Qtrue)
-		extensions |= MKDEXT_AUTOLINK;
+  if (rb_hash_lookup(hash, CSTR2SYM("autolink")) == Qtrue)
+    extensions |= MKDEXT_AUTOLINK;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("strikethrough")) == Qtrue)
-		extensions |= MKDEXT_STRIKETHROUGH;
+  if (rb_hash_lookup(hash, CSTR2SYM("strikethrough")) == Qtrue)
+    extensions |= MKDEXT_STRIKETHROUGH;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("underline")) == Qtrue)
-		extensions |= MKDEXT_UNDERLINE;
+  if (rb_hash_lookup(hash, CSTR2SYM("underline")) == Qtrue)
+    extensions |= MKDEXT_UNDERLINE;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("highlight")) == Qtrue)
-		extensions |= MKDEXT_HIGHLIGHT;
+  if (rb_hash_lookup(hash, CSTR2SYM("highlight")) == Qtrue)
+    extensions |= MKDEXT_HIGHLIGHT;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("quote")) == Qtrue)
-		extensions |= MKDEXT_QUOTE;
+  if (rb_hash_lookup(hash, CSTR2SYM("quote")) == Qtrue)
+    extensions |= MKDEXT_QUOTE;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("lax_spacing")) == Qtrue)
-		extensions |= MKDEXT_LAX_SPACING;
+  if (rb_hash_lookup(hash, CSTR2SYM("lax_spacing")) == Qtrue)
+    extensions |= MKDEXT_LAX_SPACING;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("space_after_headers")) == Qtrue)
-		extensions |= MKDEXT_SPACE_HEADERS;
+  if (rb_hash_lookup(hash, CSTR2SYM("space_after_headers")) == Qtrue)
+    extensions |= MKDEXT_SPACE_HEADERS;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("superscript")) == Qtrue)
-		extensions |= MKDEXT_SUPERSCRIPT;
+  if (rb_hash_lookup(hash, CSTR2SYM("superscript")) == Qtrue)
+    extensions |= MKDEXT_SUPERSCRIPT;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("footnotes")) == Qtrue)
-		extensions |= MKDEXT_FOOTNOTES;
+  if (rb_hash_lookup(hash, CSTR2SYM("footnotes")) == Qtrue)
+    extensions |= MKDEXT_FOOTNOTES;
 
-	if (rb_hash_lookup(hash, CSTR2SYM("no_mention_emphasis")) == Qtrue)
-		extensions |= MKDEXT_NO_MENTION_EMPHASIS;
+  if (rb_hash_lookup(hash, CSTR2SYM("no_mention_emphasis")) == Qtrue)
+    extensions |= MKDEXT_NO_MENTION_EMPHASIS;
 
-	*enabled_extensions_p = extensions;
+  *enabled_extensions_p = extensions;
 }
 
 static void
 rb_greenmat_md__free(void *markdown)
 {
-	sd_markdown_free((struct sd_markdown *)markdown);
+  sd_markdown_free((struct sd_markdown *)markdown);
 }
 
 static VALUE rb_greenmat_md__new(int argc, VALUE *argv, VALUE klass)
 {
-	VALUE rb_markdown, rb_rndr, hash, rndr_options;
-	unsigned int extensions = 0;
+  VALUE rb_markdown, rb_rndr, hash, rndr_options;
+  unsigned int extensions = 0;
 
-	struct rb_greenmat_rndr *rndr;
-	struct sd_markdown *markdown;
+  struct rb_greenmat_rndr *rndr;
+  struct sd_markdown *markdown;
 
-	if (rb_scan_args(argc, argv, "11", &rb_rndr, &hash) == 2)
-		rb_greenmat_md_flags(hash, &extensions);
+  if (rb_scan_args(argc, argv, "11", &rb_rndr, &hash) == 2)
+    rb_greenmat_md_flags(hash, &extensions);
 
-	if (rb_obj_is_kind_of(rb_rndr, rb_cClass))
-		rb_rndr = rb_funcall(rb_rndr, rb_intern("new"), 0);
+  if (rb_obj_is_kind_of(rb_rndr, rb_cClass))
+    rb_rndr = rb_funcall(rb_rndr, rb_intern("new"), 0);
 
-	if (!rb_obj_is_kind_of(rb_rndr, rb_cRenderBase))
-		rb_raise(rb_eTypeError, "Invalid Renderer instance given");
+  if (!rb_obj_is_kind_of(rb_rndr, rb_cRenderBase))
+    rb_raise(rb_eTypeError, "Invalid Renderer instance given");
 
-	/**
-	 * Automatically enable the `fenced_code_blocks` option if
-	 * given a kind of `HTML_TOC` object since many languages
-	 * like Ruby use the sharp to comment code so these comments
-	 * would be processed as titles.
-	 */
-	if (rb_obj_is_kind_of(rb_rndr, rb_cRenderHTML_TOC))
-		extensions |= MKDEXT_FENCED_CODE;
+  /**
+   * Automatically enable the `fenced_code_blocks` option if
+   * given a kind of `HTML_TOC` object since many languages
+   * like Ruby use the sharp to comment code so these comments
+   * would be processed as titles.
+   */
+  if (rb_obj_is_kind_of(rb_rndr, rb_cRenderHTML_TOC))
+    extensions |= MKDEXT_FENCED_CODE;
 
-	Data_Get_Struct(rb_rndr, struct rb_greenmat_rndr, rndr);
+  Data_Get_Struct(rb_rndr, struct rb_greenmat_rndr, rndr);
 
-	/* Merge the current options in the @options hash */
-	if (hash != Qnil) {
-		rndr_options = rb_funcall(rb_iv_get(rb_rndr, "@options"), rb_intern("merge"), 1, hash);
-		rb_iv_set(rb_rndr, "@options", rndr_options);
-	}
+  /* Merge the current options in the @options hash */
+  if (hash != Qnil) {
+    rndr_options = rb_funcall(rb_iv_get(rb_rndr, "@options"), rb_intern("merge"), 1, hash);
+    rb_iv_set(rb_rndr, "@options", rndr_options);
+  }
 
-	markdown = sd_markdown_new(extensions, MAX_NESTING, &rndr->callbacks, &rndr->options);
-	if (!markdown)
-		rb_raise(rb_eRuntimeError, "Failed to create new Renderer class");
+  markdown = sd_markdown_new(extensions, MAX_NESTING, &rndr->callbacks, &rndr->options);
+  if (!markdown)
+    rb_raise(rb_eRuntimeError, "Failed to create new Renderer class");
 
-	rb_markdown = Data_Wrap_Struct(klass, NULL, rb_greenmat_md__free, markdown);
-	rb_iv_set(rb_markdown, "@renderer", rb_rndr);
+  rb_markdown = Data_Wrap_Struct(klass, NULL, rb_greenmat_md__free, markdown);
+  rb_iv_set(rb_markdown, "@renderer", rb_rndr);
 
-	return rb_markdown;
+  return rb_markdown;
 }
 
 static VALUE rb_greenmat_md_render(VALUE self, VALUE text)
 {
-	VALUE rb_rndr;
-	struct buf *output_buf;
-	struct sd_markdown *markdown;
+  VALUE rb_rndr;
+  struct buf *output_buf;
+  struct sd_markdown *markdown;
 
-	Check_Type(text, T_STRING);
+  Check_Type(text, T_STRING);
 
-	rb_rndr = rb_iv_get(self, "@renderer");
-	Data_Get_Struct(self, struct sd_markdown, markdown);
+  rb_rndr = rb_iv_get(self, "@renderer");
+  Data_Get_Struct(self, struct sd_markdown, markdown);
 
-	if (rb_respond_to(rb_rndr, rb_intern("preprocess")))
-		text = rb_funcall(rb_rndr, rb_intern("preprocess"), 1, text);
-	if (NIL_P(text))
-		return Qnil;
+  if (rb_respond_to(rb_rndr, rb_intern("preprocess")))
+    text = rb_funcall(rb_rndr, rb_intern("preprocess"), 1, text);
+  if (NIL_P(text))
+    return Qnil;
 
-	struct rb_greenmat_rndr *renderer;
-	Data_Get_Struct(rb_rndr, struct rb_greenmat_rndr, renderer);
-	renderer->options.active_enc = rb_enc_get(text);
+  struct rb_greenmat_rndr *renderer;
+  Data_Get_Struct(rb_rndr, struct rb_greenmat_rndr, renderer);
+  renderer->options.active_enc = rb_enc_get(text);
 
-	/* initialize buffers */
-	output_buf = bufnew(128);
+  /* initialize buffers */
+  output_buf = bufnew(128);
 
-	/* render the magic */
-	sd_markdown_render(
-		output_buf,
-		(const uint8_t*)RSTRING_PTR(text),
-		RSTRING_LEN(text),
-		markdown);
+  /* render the magic */
+  sd_markdown_render(
+    output_buf,
+    (const uint8_t*)RSTRING_PTR(text),
+    RSTRING_LEN(text),
+    markdown);
 
-	/* build the Ruby string */
-	text = rb_enc_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
+  /* build the Ruby string */
+  text = rb_enc_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
 
-	bufrelease(output_buf);
+  bufrelease(output_buf);
 
-	if (rb_respond_to(rb_rndr, rb_intern("postprocess")))
-		text = rb_funcall(rb_rndr, rb_intern("postprocess"), 1, text);
+  if (rb_respond_to(rb_rndr, rb_intern("postprocess")))
+    text = rb_funcall(rb_rndr, rb_intern("postprocess"), 1, text);
 
-	return text;
+  return text;
 }
 
 __attribute__((visibility("default")))
 void Init_greenmat()
 {
-	rb_mGreenmat = rb_define_module("Greenmat");
+  rb_mGreenmat = rb_define_module("Greenmat");
 
-	rb_cMarkdown = rb_define_class_under(rb_mGreenmat, "Markdown", rb_cObject);
-	rb_define_singleton_method(rb_cMarkdown, "new", rb_greenmat_md__new, -1);
-	rb_define_method(rb_cMarkdown, "render", rb_greenmat_md_render, 1);
+  rb_cMarkdown = rb_define_class_under(rb_mGreenmat, "Markdown", rb_cObject);
+  rb_define_singleton_method(rb_cMarkdown, "new", rb_greenmat_md__new, -1);
+  rb_define_method(rb_cMarkdown, "render", rb_greenmat_md_render, 1);
 
-	Init_greenmat_rndr();
+  Init_greenmat_rndr();
 }
