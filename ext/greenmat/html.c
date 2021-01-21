@@ -1,18 +1,24 @@
 /*
  * Copyright (c) 2009, Natacha Porté
- * Copyright (c) 2011, Vicent Marti
+ * Copyright (c) 2015, Vicent Marti
  *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  */
 
 #include "markdown.h"
@@ -250,8 +256,15 @@ rndr_quote(struct buf *ob, const struct buf *text, void *opaque)
 	if (!text || !text->size)
 		return 0;
 
+	struct html_renderopt *options = opaque;
+
 	BUFPUTSL(ob, "<q>");
-	bufput(ob, text->data, text->size);
+
+	if (options->flags & HTML_ESCAPE)
+		escape_html(ob, text->data, text->size);
+	else
+		bufput(ob, text->data, text->size);
+
 	BUFPUTSL(ob, "</q>");
 
 	return 1;
@@ -265,17 +278,52 @@ rndr_linebreak(struct buf *ob, void *opaque)
 	return 1;
 }
 
-char *header_anchor(struct buf *text)
+static void
+rndr_header_anchor(struct buf *out, const struct buf *anchor)
 {
-	VALUE str = rb_str_new2(bufcstr(text));
-	VALUE space_regex = rb_reg_new(" +", 2 /* length */, 0);
-	VALUE tags_regex = rb_reg_new("<\\/?[^>]*>", 10, 0);
+	static const char *STRIPPED = " -&+$,/:;=?@\"#{}|^~[]`\\*()%.!'";
 
-	VALUE heading = rb_funcall(str, rb_intern("gsub"), 2, space_regex, rb_str_new2("-"));
-	heading = rb_funcall(heading, rb_intern("gsub"), 2, tags_regex, rb_str_new2(""));
-	heading = rb_funcall(heading, rb_intern("downcase"), 0);
+	const uint8_t *a = anchor->data;
+	const size_t size = anchor->size;
+	size_t i = 0;
+	int stripped = 0, inserted = 0;
 
-	return StringValueCStr(heading);
+	for (; i < size; ++i) {
+		// skip html tags
+		if (a[i] == '<') {
+			while (i < size && a[i] != '>')
+				i++;
+		// skip html entities
+		} else if (a[i] == '&') {
+			while (i < size && a[i] != ';')
+				i++;
+		}
+		// replace non-ascii or invalid characters with dashes
+		else if (!isascii(a[i]) || strchr(STRIPPED, a[i])) {
+			if (inserted && !stripped)
+				bufputc(out, '-');
+			// and do it only once
+			stripped = 1;
+		}
+		else {
+			bufputc(out, tolower(a[i]));
+			stripped = 0;
+			inserted++;
+		}
+	}
+
+	// replace the last dash if there was anything added
+	if (stripped && inserted)
+		out->size--;
+
+	// if anchor found empty, use djb2 hash for it
+	if (!inserted && anchor->size) {
+	        unsigned long hash = 5381;
+		for (i = 0; i < size; ++i) {
+			hash = ((hash << 5) + hash) + a[i]; /* h * 33 + c */
+		}
+		bufprintf(out, "part-%lx", hash);
+	}
 }
 
 static void
@@ -286,8 +334,12 @@ rndr_header(struct buf *ob, const struct buf *text, int level, void *opaque)
 	if (ob->size)
 		bufputc(ob, '\n');
 
-	if ((options->flags & HTML_TOC) && (level <= options->toc_data.nesting_level))
-		bufprintf(ob, "<h%d id=\"%s\">", level, header_anchor(text));
+	if ((options->flags & HTML_TOC) && level >= options->toc_data.nesting_bounds[0] &&
+	     level <= options->toc_data.nesting_bounds[1]) {
+		bufprintf(ob, "<h%d id=\"", level);
+		rndr_header_anchor(ob, text);
+		BUFPUTSL(ob, "\">");
+	}
 	else
 		bufprintf(ob, "<h%d>", level);
 
@@ -432,7 +484,10 @@ rndr_image(struct buf *ob, const struct buf *link, const struct buf *title, cons
 	if (!link || !link->size) return 0;
 
 	BUFPUTSL(ob, "<img src=\"");
-	escape_href(ob, link->data, link->size);
+
+	if (link && link->size)
+		escape_href(ob, link->data, link->size);
+
 	BUFPUTSL(ob, "\" alt=\"");
 
 	if (alt && alt->size)
@@ -440,7 +495,8 @@ rndr_image(struct buf *ob, const struct buf *link, const struct buf *title, cons
 
 	if (title && title->size) {
 		BUFPUTSL(ob, "\" title=\"");
-		escape_html(ob, title->data, title->size); }
+		escape_html(ob, title->data, title->size);
+	}
 
 	bufputs(ob, USE_XHTML(options) ? "\"/>" : "\">");
 	return 1;
@@ -591,7 +647,7 @@ rndr_footnote_def(struct buf *ob, const struct buf *text, unsigned int num, void
 	bufprintf(ob, "\n<li id=\"fn%d\">\n", num);
 	if (pfound) {
 		bufput(ob, text->data, i);
-		bufprintf(ob, "&nbsp;<a href=\"#fnref%d\" rev=\"footnote\">&#8617;</a>", num);
+		bufprintf(ob, "&nbsp;<a href=\"#fnref%d\">&#8617;</a>", num);
 		bufput(ob, text->data + i, text->size - i);
 	} else if (text) {
 		bufput(ob, text->data, text->size);
@@ -602,7 +658,7 @@ rndr_footnote_def(struct buf *ob, const struct buf *text, unsigned int num, void
 static int
 rndr_footnote_ref(struct buf *ob, unsigned int num, void *opaque)
 {
-	bufprintf(ob, "<sup id=\"fnref%d\"><a href=\"#fn%d\" rel=\"footnote\">%d</a></sup>", num, num, num);
+	bufprintf(ob, "<sup id=\"fnref%d\"><a href=\"#fn%d\">%d</a></sup>", num, num, num);
 	return 1;
 }
 
@@ -611,7 +667,8 @@ toc_header(struct buf *ob, const struct buf *text, int level, void *opaque)
 {
 	struct html_renderopt *options = opaque;
 
-	if (level <= options->toc_data.nesting_level) {
+	if (level >= options->toc_data.nesting_bounds[0] &&
+	    level <= options->toc_data.nesting_bounds[1]) {
 		/* set the level offset if this is the first header
 		 * we're parsing for the document */
 		if (options->toc_data.current_level == 0)
@@ -635,8 +692,17 @@ toc_header(struct buf *ob, const struct buf *text, int level, void *opaque)
 			BUFPUTSL(ob,"</li>\n<li>\n");
 		}
 
-		bufprintf(ob, "<a href=\"#%s\">", header_anchor(text));
-		if (text) escape_html(ob, text->data, text->size);
+		bufprintf(ob, "<a href=\"#");
+		rndr_header_anchor(ob, text);
+		BUFPUTSL(ob, "\">");
+
+		if (text) {
+			if (options->flags & HTML_ESCAPE)
+				escape_html(ob, text->data, text->size);
+			else
+				bufput(ob, text->data, text->size);
+		}
+
 		BUFPUTSL(ob, "</a>\n");
 	}
 }
@@ -752,7 +818,8 @@ sdhtml_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, 
 	/* Prepare the options pointer */
 	memset(options, 0x0, sizeof(struct html_renderopt));
 	options->flags = render_flags;
-	options->toc_data.nesting_level = 99;
+	options->toc_data.nesting_bounds[0] = 1;
+	options->toc_data.nesting_bounds[1] = 6;
 
 	/* Prepare the callbacks */
 	memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));

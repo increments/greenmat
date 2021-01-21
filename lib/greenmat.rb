@@ -1,6 +1,8 @@
 require 'greenmat.so'
 require 'greenmat/compat'
-require 'greenmat/version'
+
+module Greenmat
+  VERSION = '3.5.1'
 
 module Greenmat
   class Markdown
