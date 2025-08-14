@@ -3,6 +3,10 @@
 
 # Greenmat
 
+> [!WARNING]
+> This repository is deprecated and no longer maintained.
+> Please use the new repository at [qiita-marker](https://github.com/increments/qiita_marker) instead.
+
 **Greenmat** is a Ruby library for Markdown processing, based on [Redcarpet](https://github.com/vmg/redcarpet).
 
 It's a core module of [qiita-markdown](https://github.com/increments/qiita-markdown) gem and not intended for direct use. If you are looking for Qiita-specified markdown processor, use qiita-markdown gem.
